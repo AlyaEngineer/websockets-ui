@@ -1,10 +1,10 @@
-import { WebSocket } from 'ws';
+import type { WebSocket as WSWebSocket } from 'ws';
 import { Player, WSMessage, RegData, RegResponseData } from '../types';
 import { addPlayer, findPlayerByName } from '@/storage/players';
 import { generateId } from '@/utils/generateId';
 import { log } from '@/utils/log';
 
-export const handleReg = (ws: WebSocket, message: WSMessage<RegData>): void => {
+export const handleReg = (ws: WSWebSocket, message: WSMessage<RegData>): void => {
   const { name, password } = message.data;
 
   let player: Player | undefined = findPlayerByName(name);
@@ -18,7 +18,7 @@ export const handleReg = (ws: WebSocket, message: WSMessage<RegData>): void => {
         id: 0,
         data: {
           name,
-          playerId: '',
+          index: '',
           error: true,
           errorText: 'Incorrect password',
         },
@@ -27,9 +27,18 @@ export const handleReg = (ws: WebSocket, message: WSMessage<RegData>): void => {
       log(message, response);
       return;
     }
+    player.ws = ws;
+    player.sessionId = generateId();
   } else {
     const playerId = generateId();
-    player = { id: playerId, name, password, wins: 0 };
+    player = {
+      id: playerId,
+      name,
+      password,
+      wins: 0,
+      sessionId: generateId(),
+      ws,
+    };
     addPlayer(player);
   }
 
@@ -38,7 +47,7 @@ export const handleReg = (ws: WebSocket, message: WSMessage<RegData>): void => {
     id: 0,
     data: {
       name: player.name,
-      playerId: player.id,
+      index: player.id,
       error: false,
     },
   };

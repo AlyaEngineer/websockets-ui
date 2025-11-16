@@ -1,4 +1,8 @@
+import type { WebSocket as WSWebSocket } from 'ws';
+
 export interface Player {
+  sessionId?: string;
+  ws?: WSWebSocket;
   id: string;
   name: string;
   password: string;
@@ -18,7 +22,25 @@ export interface RegData {
 
 export interface RegResponseData {
   name: string;
-  playerId: string;
+  index: string;
   error: boolean;
   errorText?: string;
+}
+
+export interface RoomData {
+  rooms: {
+    roomId: string;
+    roomUsers: {
+      name: string;
+      index: string;
+    }[];
+  }[];
+}
+
+export interface RoomInfo {
+  roomId: string;
+  roomUsers: {
+    name: string;
+    index: string;
+  }[];
 }
