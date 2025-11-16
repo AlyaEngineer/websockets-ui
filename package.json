@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "Template for the WebSocket remote control task",
   "main": "index.js",
-  "type": "module",
+  "type": "commonjs",
   "scripts": {
-    "start": "node ./index.js",
-    "start:dev": "nodemon ./index.js",
+    "start": "node ./dist/index.js",
+    "start:dev": "ts-node-dev --respawn --transpile-only ./src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
     "lint": "eslint . --ext .ts,.js --ignore-pattern dist/** --ignore-pattern node_modules/**",
