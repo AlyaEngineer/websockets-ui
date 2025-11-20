@@ -1,17 +1,29 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Player } from '../ws/types';
+import { Player } from '@/ws/types';
 
-interface Game {
+export interface Game {
   id: string;
   players: Player[];
+  currentPlayerIndex?: string;
 }
 
-const games: Game[] = [];
+class GamesStorage {
+  private games: Game[] = [];
 
-export const createGame = (players: Player[]): Game => {
-  const game: Game = { id: uuidv4(), players };
-  games.push(game);
-  return game;
-};
+  create(players: Player[]): Game {
+    const game: Game = { id: uuidv4(), players };
+    this.games.push(game);
+    return game;
+  }
 
-export const getGameById = (gameId: string): Game | undefined => games.find((g) => g.id === gameId);
+  getById(gameId: string): Game | undefined {
+    return this.games.find((g) => g.id === gameId);
+  }
+
+  update(game: Game) {
+    const index = this.games.findIndex((g) => g.id === game.id);
+    if (index !== -1) this.games[index] = game;
+  }
+}
+
+export const gamesStorage = new GamesStorage();
