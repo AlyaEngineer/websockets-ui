@@ -1,6 +1,9 @@
 import { WebSocketServer } from 'ws';
 import { router } from './router';
 import { log } from '../utils/log';
+import { playersStorage } from '@/storage/players';
+import { roomsStorage } from '@/storage/rooms';
+import { sendRoomsUpdate } from '@/utils/updateRooms';
 
 const PORT = 3000;
 
@@ -10,18 +13,24 @@ wss.on('connection', (ws) => {
   log('Client connected');
 
   ws.on('message', (raw) => {
-    let message;
     try {
-      message = JSON.parse(raw.toString());
+      const message = JSON.parse(raw.toString());
+      router(ws, message);
     } catch {
       log('Invalid JSON');
-      return;
     }
-
-    router(ws, message);
   });
 
-  ws.on('close', () => log('Client disconnected'));
+  ws.on('close', () => {
+    const player = playersStorage.getByWS(ws);
+    if (player) {
+      roomsStorage.removePlayer(player.id);
+      sendRoomsUpdate();
+      log(`Client disconnected: ${player.name}`);
+    } else {
+      log('Client disconnected');
+    }
+  });
 });
 
 log(`WebSocket server running on ws://localhost:${PORT} (backend started)`);

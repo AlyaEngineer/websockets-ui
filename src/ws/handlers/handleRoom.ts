@@ -1,95 +1,104 @@
-import type { WebSocket as WSWebSocket } from 'ws';
-import { WSMessage, Player, RoomData } from '../types';
-import { createRoom, addPlayerToRoom, getRooms, findRoomById } from '@/storage/rooms';
+import type { WebSocket } from 'ws';
+import { playersStorage } from '@/storage/players';
+import { roomsStorage } from '@/storage/rooms';
 import { generateId } from '@/utils/generateId';
-import { log } from '@/utils/log';
+import { send } from '../send';
+import { RoomMessage } from '../types';
+import { sendRoomsUpdate } from '@/utils/updateRooms';
 
-interface RoomRequest {
-  action: 'create_room' | 'add_user_to_room';
-  roomId?: string;
-  player: Player;
+interface GamePlayer {
+  playerId: string;
+  name: string;
+  ws: WebSocket;
 }
 
-export const handleRoom = (ws: WSWebSocket, message: WSMessage<RoomRequest>): void => {
-  const { action, roomId } = message.data;
+export const activeGames: Record<string, GamePlayer[]> = {};
 
-  const player: Player = {
-    ...message.data.player,
-    ws,
-    sessionId: message.data.player.sessionId || generateId(),
-  };
+export const handleRoom = (ws: WebSocket, message: RoomMessage) => {
+  const player = playersStorage.getByWS(ws);
+  if (!player) return;
 
-  switch (action) {
+  switch (message.type) {
     case 'create_room': {
-      createRoom(player);
+      const alreadyInRoom = roomsStorage
+        .getAvailableRooms()
+        .some((r) => r.users.some((u) => u.index === player.id));
 
-      const roomsList: RoomData = {
-        rooms: getRooms().map((r) => ({
-          roomId: r.id,
-          roomUsers: r.users.map((u) => ({ name: u.name, index: u.id })),
-        })),
-      };
+      if (alreadyInRoom) {
+        break;
+      }
 
-      const response: WSMessage<RoomData> = {
-        type: 'update_room',
-        id: 0,
-        data: roomsList,
-      };
+      const newRoom = roomsStorage.createRoom(player);
 
-      ws.send(JSON.stringify(response));
-      log(message, response);
+      if (!newRoom) {
+        ws.send(
+          JSON.stringify({
+            type: 'error',
+            data: 'Failed to create room',
+            id: 0,
+          }),
+        );
+        break;
+      }
+
+      ws.send(
+        JSON.stringify({
+          type: 'room_created',
+          data: {
+            roomId: newRoom.roomId,
+            roomUsers: newRoom.users,
+          },
+          id: 0,
+        }),
+      );
+
+      sendRoomsUpdate();
       break;
     }
 
     case 'add_user_to_room': {
-      if (!roomId) return;
+      const { indexRoom } = message.data;
 
-      const success = addPlayerToRoom(roomId, player);
-      if (!success) {
-        console.warn(`Room with id ${roomId} not found`);
+      const room = roomsStorage.getById(String(indexRoom));
+      if (!room) {
+        ws.send(
+          JSON.stringify({
+            type: 'error',
+            data: 'Room not found',
+            id: 0,
+          }),
+        );
         return;
       }
 
-      const room = findRoomById(roomId);
-      if (!room) return;
+      if (!room.users.some((u) => u.index === player.id)) {
+        room.users.push({ name: player.name, index: player.id });
+      }
 
       if (room.users.length === 2) {
         const idGame = generateId();
-        room.users.forEach((p) => {
-          const idPlayer = generateId();
-          const createGameMsg: WSMessage<{ idGame: string; idPlayer: string }> = {
+
+        const gamePlayers: GamePlayer[] = room.users.map((u) => ({
+          playerId: generateId(),
+          name: u.name,
+          ws: playersStorage.getById(u.index)!.ws!,
+        }));
+
+        activeGames[idGame] = gamePlayers;
+
+        gamePlayers.forEach((gp) => {
+          send(gp.ws, {
             type: 'create_game',
+            data: { idGame, idPlayer: gp.playerId },
             id: 0,
-            data: {
-              idGame,
-              idPlayer,
-            },
-          };
-          p.ws?.send(JSON.stringify(createGameMsg));
-          log(message, createGameMsg);
+          });
         });
-      } else {
-        const roomsList: RoomData = {
-          rooms: getRooms().map((r) => ({
-            roomId: r.id,
-            roomUsers: r.users.map((u) => ({ name: u.name, index: u.id })),
-          })),
-        };
 
-        const response: WSMessage<RoomData> = {
-          type: 'update_room',
-          id: 0,
-          data: roomsList,
-        };
-
-        ws.send(JSON.stringify(response));
-        log(message, response);
+        roomsStorage.remove(room.roomId);
       }
 
+      sendRoomsUpdate();
       break;
     }
-
-    default:
-      console.warn('Unknown room action', action);
   }
 };

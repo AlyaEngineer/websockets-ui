@@ -1,32 +1,65 @@
-import { v4 as uuidv4 } from 'uuid';
-import { Player } from '../ws/types';
+import { Player } from '@/ws/types';
+import { generateId } from '@/utils/generateId';
 
 interface Room {
-  id: string;
-  users: Player[];
+  roomId: string;
+  users: { name: string; index: string }[];
 }
 
 const rooms: Room[] = [];
 
-export const getRooms = (): Room[] => rooms;
+export const roomsStorage = {
+  getAvailableRooms() {
+    return rooms.filter((r) => r.users.length < 2);
+  },
 
-export const findRoomById = (roomId: string): Room | undefined =>
-  rooms.find((r) => r.id === roomId);
+  createRoom(player: Player) {
+    if (rooms.some((r) => r.users.some((u) => u.index === player.id))) {
+      return null;
+    }
 
-export const createRoom = (player: Player): Room => {
-  const newRoom: Room = { id: uuidv4(), users: [player] };
-  rooms.push(newRoom);
-  return newRoom;
-};
+    const room: Room = {
+      roomId: generateId(),
+      users: [{ name: player.name, index: player.id }],
+    };
+    rooms.push(room);
+    return room;
+  },
 
-export const addPlayerToRoom = (roomId: string, player: Player): boolean => {
-  const room = findRoomById(roomId);
-  if (!room) return false;
-  if (!room.users.find((u) => u.id === player.id)) room.users.push(player);
-  return true;
-};
+  addUser(roomId: string, player: Player) {
+    const room = rooms.find((r) => r.roomId === roomId);
+    if (!room) return null;
 
-export const removeRoom = (roomId: string): void => {
-  const index = rooms.findIndex((r) => r.id === roomId);
-  if (index !== -1) rooms.splice(index, 1);
+    if (room.users.some((u) => u.index === player.id)) return room;
+
+    if (room.users.length >= 2) return null;
+
+    room.users.push({ name: player.name, index: player.id });
+    return room;
+  },
+
+  remove(roomId: string) {
+    const i = rooms.findIndex((r) => r.roomId === roomId);
+    if (i !== -1) rooms.splice(i, 1);
+  },
+
+  getById(roomId: string) {
+    return rooms.find((r) => r.roomId === roomId);
+  },
+
+  removePlayer(playerId: string) {
+    rooms.forEach((room, i) => {
+      room.users = room.users.filter((u) => u.index !== playerId);
+      if (room.users.length === 0) {
+        rooms.splice(i, 1);
+      }
+    });
+  },
+
+  getRoomInfoList() {
+    return rooms.map((r) => ({
+      roomId: r.roomId,
+      roomUsers: r.users.map((u) => ({ name: u.name, index: u.index })),
+    }));
+  },
 };
